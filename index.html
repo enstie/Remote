@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Epson Remote</title>
+  <style>
+    :root {
+      --bg-a: #0f172a;
+      --bg-b: #1e293b;
+      --glass: rgba(255, 255, 255, 0.10);
+      --glass-strong: rgba(255, 255, 255, 0.14);
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --ok: #22c55e;
+      --danger: #ef4444;
+      --accent: #38bdf8;
+      --shadow: 0 20px 40px rgba(2, 6, 23, 0.5);
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      background: radial-gradient(circle at top right, #1d4ed8 0%, transparent 35%),
+                  radial-gradient(circle at bottom left, #0891b2 0%, transparent 30%),
+                  linear-gradient(160deg, var(--bg-a), var(--bg-b));
+      color: var(--text);
+      display: grid;
+      place-items: center;
+      padding: 16px;
+    }
+    .app {
+      width: min(420px, 100%);
+      background: var(--glass);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 24px;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      padding: 16px;
+      box-shadow: var(--shadow);
+    }
+    .settings-panel {
+      margin-bottom: 14px;
+      padding: 12px;
+      border-radius: 14px;
+      background: rgba(15, 23, 42, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .settings-panel label {
+      font-size: 0.8rem;
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .settings-panel input {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      padding: 8px 12px;
+      color: var(--text);
+      font-family: monospace;
+      font-size: 0.95rem;
+      outline: none;
+    }
+    .settings-panel input:focus {
+      border-color: var(--accent);
+    }
+    .status {
+      margin: 0 0 14px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(15,23,42,.35);
+      font-size: .9rem;
+      color: var(--muted);
+      border: 1px solid rgba(255,255,255,.08);
+      text-align: center;
+    }
+    .row { display: grid; gap: 10px; margin-bottom: 12px; }
+    .power { grid-template-columns: 1fr 1fr; }
+    .sources { grid-template-columns: repeat(3, 1fr); }
+    .btn {
+      border: 1px solid rgba(255,255,255,.16);
+      background: var(--glass-strong);
+      color: var(--text);
+      border-radius: 14px;
+      padding: 13px 10px;
+      font-weight: 600;
+      font-size: .95rem;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, .35);
+      transition: transform .08s ease, filter .15s ease;
+      cursor: pointer;
+    }
+    .btn:active { transform: scale(.97); filter: brightness(1.12); }
+    .btn.on { background: rgba(34,197,94,.22); border-color: rgba(34,197,94,.55); }
+    .btn.off { background: rgba(239,68,68,.22); border-color: rgba(239,68,68,.55); }
+    .dpad-wrap {
+      background: rgba(15,23,42,.32);
+      border: 1px solid rgba(255,255,255,.09);
+      border-radius: var(--radius);
+      padding: 12px;
+    }
+    .dpad {
+      width: 260px;
+      max-width: 100%;
+      aspect-ratio: 1/1;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-rows: 1fr 1fr 1fr;
+      gap: 10px;
+    }
+    .dpad .btn { height: 100%; }
+    .center { background: rgba(56,189,248,.20); border-color: rgba(56,189,248,.5); }
+    .foot { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+    .tiny { font-size: .85rem; color: var(--muted); text-align: center; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="settings-panel">
+      <label for="projector-ip">Projector Network Target</label>
+      <input type="text" id="projector-ip" placeholder="e.g., 192.168.11.1" onchange="saveIP(this.value)" />
+    </section>
+
+    <p id="status" class="status">Offline Remote Loaded</p>
+
+    <section class="row power">
+      <button class="btn on" onclick="sendCommand('PWR ON')">Power On</button>
+      <button class="btn off" onclick="sendCommand('PWR OFF')">Power Off</button>
+    </section>
+
+    <section class="dpad-wrap">
+      <div class="dpad">
+        <div></div>
+        <button class="btn" onclick="sendCommand('KEY UP')">▲</button>
+        <div></div>
+
+        <button class="btn" onclick="sendCommand('KEY LEFT')">◀</button>
+        <button class="btn center" onclick="sendCommand('KEY ENTER')">Enter</button>
+        <button class="btn" onclick="sendCommand('KEY RIGHT')">▶</button>
+
+        <div></div>
+        <button class="btn" onclick="sendCommand('KEY DOWN')">▼</button>
+        <div></div>
+      </div>
+
+      <div class="foot">
+        <button class="btn" onclick="sendCommand('KEY ESC')">Back</button>
+        <button class="btn" onclick="sendCommand('KEY MENU')">Menu</button>
+      </div>
+      <div class="tiny">Epson Local Network UI</div>
+    </section>
+
+    <section class="row sources" style="margin-top: 12px;">
+      <button class="btn" onclick="sendCommand('SOURCE 30')">HDMI 1</button>
+      <button class="btn" onclick="sendCommand('SOURCE A0')">HDMI 2</button>
+      <button class="btn" onclick="sendCommand('SOURCE 11')">Computer</button>
+    </section>
+  </main>
+
+  <script>
+    // Load persisted local target IP on initialization
+    const ipInput = document.getElementById('projector-ip');
+    const storedIP = localStorage.getItem('epson_projector_ip') || '192.168.11.1';
+    ipInput.value = storedIP;
+
+    function saveIP(val) {
+      localStorage.setItem('epson_projector_ip', val.trim());
+      setStatus(`Target IP updated to: ${val.trim()}`);
+    }
+
+    function setStatus(message) {
+      document.getElementById('status').textContent = message;
+    }
+
+    async function sendCommand(rawCommand) {
+      const targetIP = localStorage.getItem('epson_projector_ip') || '192.168.11.1';
+      setStatus(`Sending: ${rawCommand}...`);
+      
+      try {
+        // Fires client-side network request directly onto your phone's active wireless connection
+        const response = await fetch(`http://${targetIP}/api/control`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cmd: rawCommand }),
+          mode: 'no-cors' // Safe configuration bypasses local cross-origin blocks
+        });
+        
+        setStatus(`✅ Sent: ${rawCommand}`);
+      } catch (e) {
+        setStatus(`❌ Local
