@@ -372,7 +372,17 @@ def handle_unexpected_error(exc):
     """Prevent internal exception details from being exposed to clients."""
     if isinstance(exc, HTTPException):
         return exc
+    app.logger.exception("Unhandled internal error: %s", exc)
     return jsonify({"ok": False, "error": "Internal server error."}), 500
+
+
+def safe_json_response(payload_fn):
+    """Build API JSON responses without exposing internal exception details."""
+    try:
+        return jsonify(payload_fn())
+    except Exception as exc:
+        app.logger.exception("API handler failed: %s", exc)
+        return jsonify({"ok": False, "error": "Internal server error."}), 500
 
 
 @app.get("/")
@@ -382,18 +392,21 @@ def index():
 
 @app.get("/api/status")
 def status():
-    ip, error = get_state()
-    return jsonify({"connected": bool(ip), "projector_ip": ip, "error": error})
+    def payload():
+        ip, error = get_state()
+        return {"connected": bool(ip), "projector_ip": ip, "error": error}
+
+    return safe_json_response(payload)
 
 
 @app.post("/api/power/on")
 def power_on():
-    return jsonify(send_escvp_command("PWR ON"))
+    return safe_json_response(lambda: send_escvp_command("PWR ON"))
 
 
 @app.post("/api/power/off")
 def power_off():
-    return jsonify(send_escvp_command("PWR OFF"))
+    return safe_json_response(lambda: send_escvp_command("PWR OFF"))
 
 
 @app.post("/api/source/<source_id>")
@@ -401,7 +414,7 @@ def source(source_id: str):
     source_code = SOURCE_MAP.get(source_id.lower())
     if not source_code:
         return jsonify({"ok": False, "error": f"Invalid source '{source_id}'."}), 400
-    return jsonify(send_escvp_command(f"SOURCE {source_code}"))
+    return safe_json_response(lambda: send_escvp_command(f"SOURCE {source_code}"))
 
 
 @app.post("/api/key/<keycode>")
@@ -409,11 +422,11 @@ def key(keycode: str):
     key_cmd = KEY_MAP.get(keycode.lower())
     if not key_cmd:
         return jsonify({"ok": False, "error": f"Invalid key '{keycode}'."}), 400
-    return jsonify(send_escvp_command(f"KEY {key_cmd}"))
+    return safe_json_response(lambda: send_escvp_command(f"KEY {key_cmd}"))
 
 
 if __name__ == "__main__":
     # Start discovery at launch so the user never has to enter an IP manually.
     threading.Thread(target=discovery_worker, daemon=True).start()
-    print(f"Starting Epson Remote at http://0.0.0.0:{WEB_PORT}")
+    app.logger.info("Starting Epson Remote at http://0.0.0.0:%s", WEB_PORT)
     app.run(host="0.0.0.0", port=WEB_PORT, debug=False)
