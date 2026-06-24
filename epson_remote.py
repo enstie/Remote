@@ -376,15 +376,6 @@ def handle_unexpected_error(exc):
     return jsonify({"ok": False, "error": "Internal server error."}), 500
 
 
-def safe_json_response(payload_fn):
-    """Build API JSON responses without exposing internal exception details."""
-    try:
-        return jsonify(payload_fn())
-    except Exception as exc:
-        app.logger.exception("API handler failed: %s", exc)
-        return jsonify({"ok": False, "error": "Internal server error."}), 500
-
-
 @app.get("/")
 def index():
     return render_template_string(HTML)
@@ -392,37 +383,54 @@ def index():
 
 @app.get("/api/status")
 def status():
-    def payload():
+    try:
         ip, error = get_state()
-        return {"connected": bool(ip), "projector_ip": ip, "error": error}
-
-    return safe_json_response(payload)
+        return jsonify({"connected": bool(ip), "projector_ip": ip, "error": error})
+    except Exception as exc:
+        app.logger.exception("Status endpoint failed: %s", exc)
+        return jsonify({"ok": False, "error": "Internal server error."}), 500
 
 
 @app.post("/api/power/on")
 def power_on():
-    return safe_json_response(lambda: send_escvp_command("PWR ON"))
+    try:
+        return jsonify(send_escvp_command("PWR ON"))
+    except Exception as exc:
+        app.logger.exception("Power on endpoint failed: %s", exc)
+        return jsonify({"ok": False, "error": "Internal server error."}), 500
 
 
 @app.post("/api/power/off")
 def power_off():
-    return safe_json_response(lambda: send_escvp_command("PWR OFF"))
+    try:
+        return jsonify(send_escvp_command("PWR OFF"))
+    except Exception as exc:
+        app.logger.exception("Power off endpoint failed: %s", exc)
+        return jsonify({"ok": False, "error": "Internal server error."}), 500
 
 
 @app.post("/api/source/<source_id>")
 def source(source_id: str):
-    source_code = SOURCE_MAP.get(source_id.lower())
-    if not source_code:
-        return jsonify({"ok": False, "error": f"Invalid source '{source_id}'."}), 400
-    return safe_json_response(lambda: send_escvp_command(f"SOURCE {source_code}"))
+    try:
+        source_code = SOURCE_MAP.get(source_id.lower())
+        if not source_code:
+            return jsonify({"ok": False, "error": f"Invalid source '{source_id}'."}), 400
+        return jsonify(send_escvp_command(f"SOURCE {source_code}"))
+    except Exception as exc:
+        app.logger.exception("Source endpoint failed: %s", exc)
+        return jsonify({"ok": False, "error": "Internal server error."}), 500
 
 
 @app.post("/api/key/<keycode>")
 def key(keycode: str):
-    key_cmd = KEY_MAP.get(keycode.lower())
-    if not key_cmd:
-        return jsonify({"ok": False, "error": f"Invalid key '{keycode}'."}), 400
-    return safe_json_response(lambda: send_escvp_command(f"KEY {key_cmd}"))
+    try:
+        key_cmd = KEY_MAP.get(keycode.lower())
+        if not key_cmd:
+            return jsonify({"ok": False, "error": f"Invalid key '{keycode}'."}), 400
+        return jsonify(send_escvp_command(f"KEY {key_cmd}"))
+    except Exception as exc:
+        app.logger.exception("Key endpoint failed: %s", exc)
+        return jsonify({"ok": False, "error": "Internal server error."}), 500
 
 
 if __name__ == "__main__":
