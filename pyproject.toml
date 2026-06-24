@@ -1,0 +1,2 @@
+[tool.vercel]
+entrypoint = "epson_remote:app"
