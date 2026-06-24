@@ -124,7 +124,7 @@ def discover_by_subnet_scan(timeout_seconds: float = 12.0) -> Optional[str]:
                 if future.result():
                     return futures[future]
         except FuturesTimeoutError:
-            return None
+            pass
     return None
 
 
@@ -195,8 +195,9 @@ def send_escvp_command(raw_command: str) -> dict:
                 pass
         return {"ok": True, "command": raw_command, "response": response.decode(errors="ignore")}
     except OSError as exc:
-        set_state(error=f"Command failed: {exc}")
-        return {"ok": False, "error": str(exc), "command": raw_command}
+        app.logger.exception("ESC/VP21 command failed for %s: %s", raw_command, exc)
+        set_state(error="Projector communication failed.")
+        return {"ok": False, "error": "Projector communication failed.", "command": raw_command}
 
 
 HTML = """
