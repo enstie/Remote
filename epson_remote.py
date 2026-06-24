@@ -13,11 +13,18 @@ import ipaddress
 import socket
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError, as_completed
 from typing import Optional
 
 from flask import Flask, jsonify, render_template_string
+from werkzeug.exceptions import HTTPException
 
 app = Flask(__name__)
+app.config.update(
+    DEBUG=False,
+    TESTING=False,
+    PROPAGATE_EXCEPTIONS=False,
+)
 
 # ESC/VP.net discovery / command handshake payload required by Epson protocol.
 ESCVP_HANDSHAKE = b"ESC/VP.net\x10\x03\x00\x00\x00\x00\x0d"
@@ -28,6 +35,7 @@ WEB_PORT = 5000
 state_lock = threading.Lock()
 projector_ip: Optional[str] = None
 last_error: Optional[str] = None
+_UNSET = object()
 
 # Supported source and key mappings exposed by API/UI.
 SOURCE_MAP = {
@@ -72,7 +80,7 @@ def discover_by_udp_broadcast(timeout_seconds: float = 3.0) -> Optional[str]:
             sock.sendto(ESCVP_HANDSHAKE, ("255.255.255.255", PROJECTOR_PORT))
             try:
                 data, addr = sock.recvfrom(1024)
-                if addr and data is not None:
+                if data and addr and addr[0]:
                     return addr[0]
             except socket.timeout:
                 continue
@@ -105,15 +113,18 @@ def discover_by_subnet_scan(timeout_seconds: float = 12.0) -> Optional[str]:
     except ValueError:
         return None
 
-    deadline = time.time() + timeout_seconds
-    for host in network.hosts():
-        if time.time() > deadline:
-            break
-        host_ip = str(host)
-        if host_ip == local_ip:
-            continue
-        if probe_projector_tcp(host_ip):
-            return host_ip
+    hosts = [str(host) for host in network.hosts() if str(host) != local_ip]
+    if not hosts:
+        return None
+
+    with ThreadPoolExecutor(max_workers=64) as executor:
+        futures = {executor.submit(probe_projector_tcp, host_ip): host_ip for host_ip in hosts}
+        try:
+            for future in as_completed(futures, timeout=timeout_seconds):
+                if future.result():
+                    return futures[future]
+        except FuturesTimeoutError:
+            return None
     return None
 
 
@@ -125,13 +136,13 @@ def discover_projector() -> Optional[str]:
     return discover_by_subnet_scan()
 
 
-def set_state(ip: Optional[str] = None, error: Optional[str] = None) -> None:
+def set_state(ip: Optional[str] | object = _UNSET, error: Optional[str] | object = _UNSET) -> None:
     """Update shared projector state safely."""
     global projector_ip, last_error
     with state_lock:
-        if ip is not None:
+        if ip is not _UNSET:
             projector_ip = ip
-        if error is not None:
+        if error is not _UNSET:
             last_error = error
 
 
@@ -159,7 +170,13 @@ def send_escvp_command(raw_command: str) -> dict:
     if not ip:
         return {"ok": False, "error": "Projector not discovered yet."}
 
-    command_payload = f"{raw_command}\r".encode("ascii", errors="strict")
+    try:
+        command_payload = f"{raw_command}\r".encode("ascii", errors="strict")
+    except UnicodeEncodeError:
+        return {
+            "ok": False,
+            "error": f"Invalid command contains non-ASCII characters: {raw_command!r}",
+        }
     try:
         with socket.create_connection((ip, PROJECTOR_PORT), timeout=2.0) as sock:
             sock.settimeout(2.0)
@@ -348,6 +365,14 @@ HTML = """
 </body>
 </html>
 """
+
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(exc):
+    """Prevent internal exception details from being exposed to clients."""
+    if isinstance(exc, HTTPException):
+        return exc
+    return jsonify({"ok": False, "error": "Internal server error."}), 500
 
 
 @app.get("/")
