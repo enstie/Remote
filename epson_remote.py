@@ -35,7 +35,6 @@ WEB_PORT = 5000
 state_lock = threading.Lock()
 projector_ip: Optional[str] = None
 last_error: Optional[str] = None
-_UNSET = object()
 
 # Supported source and key mappings exposed by API/UI.
 SOURCE_MAP = {
@@ -59,7 +58,7 @@ def get_local_ip() -> str:
     """Detect the primary local IPv4 used for outbound traffic."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        # No internet is required; this does not send traffic successfully.
+        # No internet is required; this does not actually send traffic.
         sock.connect(("8.8.8.8", 80))
         return sock.getsockname()[0]
     except OSError:
@@ -136,14 +135,18 @@ def discover_projector() -> Optional[str]:
     return discover_by_subnet_scan()
 
 
-def set_state(ip: Optional[str] | object = _UNSET, error: Optional[str] | object = _UNSET) -> None:
-    """Update shared projector state safely."""
-    global projector_ip, last_error
+def set_projector_ip(ip: Optional[str]) -> None:
+    """Update shared projector IP safely."""
+    global projector_ip
     with state_lock:
-        if ip is not _UNSET:
-            projector_ip = ip
-        if error is not _UNSET:
-            last_error = error
+        projector_ip = ip
+
+
+def set_last_error(error: Optional[str]) -> None:
+    """Update shared error state safely."""
+    global last_error
+    with state_lock:
+        last_error = error
 
 
 def get_state() -> tuple[Optional[str], Optional[str]]:
@@ -156,9 +159,10 @@ def discovery_worker() -> None:
     """Background discovery that runs at launch."""
     found_ip = discover_projector()
     if found_ip:
-        set_state(ip=found_ip, error=None)
+        set_projector_ip(found_ip)
+        set_last_error(None)
     else:
-        set_state(error="No Epson projector discovered on local network.")
+        set_last_error("No Epson projector discovered on local network.")
 
 
 def send_escvp_command(raw_command: str) -> dict:
@@ -196,7 +200,7 @@ def send_escvp_command(raw_command: str) -> dict:
         return {"ok": True, "command": raw_command, "response": response.decode(errors="ignore")}
     except OSError as exc:
         app.logger.exception("ESC/VP21 command failed for %s: %s", raw_command, exc)
-        set_state(error="Projector communication failed.")
+        set_last_error("Projector communication failed.")
         return {"ok": False, "error": "Projector communication failed.", "command": raw_command}
 
 
@@ -225,7 +229,7 @@ HTML = """
     body {
       margin: 0;
       min-height: 100vh;
-      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
       background: radial-gradient(circle at top right, #1d4ed8 0%, transparent 35%),
                   radial-gradient(circle at bottom left, #0891b2 0%, transparent 30%),
                   linear-gradient(160deg, var(--bg-a), var(--bg-b));
