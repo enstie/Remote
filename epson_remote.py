@@ -116,7 +116,7 @@ def discover_by_subnet_scan(timeout_seconds: float = 12.0) -> Optional[str]:
     if not hosts:
         return None
 
-    with ThreadPoolExecutor(max_workers=64) as executor:
+    with ThreadPoolExecutor(max_workers=24) as executor:
         futures = {executor.submit(probe_projector_tcp, host_ip): host_ip for host_ip in hosts}
         try:
             for future in as_completed(futures, timeout=timeout_seconds):
@@ -373,7 +373,7 @@ HTML = """
 
 
 @app.errorhandler(Exception)
-def handle_unexpected_error(exc):
+def handle_error(exc):
     """Prevent internal exception details from being exposed to clients."""
     if isinstance(exc, HTTPException):
         return exc
