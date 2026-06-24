@@ -1,2 +1,9 @@
+[project]
+name = "epson-remote"
+version = "0.1.0"
+dependencies = [
+    "Flask>=3.0.0"
+]
+
 [tool.vercel]
 entrypoint = "epson_remote:app"
